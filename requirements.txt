@@ -1,0 +1,9 @@
+astropy
+matplotlib
+numpy
+pandas
+scipy
+specutils
+myst_parser
+hatch
+pytest
