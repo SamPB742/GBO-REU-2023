@@ -253,22 +253,16 @@ def triple_gauss_func(x, cont_yint, cont_slope,
 
 
 """
-Test function for integrated intensity composed of a gaussian and 
-a continuum line
-"""
-def test_func(x):
+Test function for integrated intensity composed of a gaussian 
+
+def test_func(x, mean, std, scale_factor):
     #parameters for the test func for easy changing
-    
-    mean = 0
-    std = 1
-    slope = 0 
-    yint = 0
-    scale_factor = 1
     rv1 = stats.norm(mean, std)
-    return (rv1.pdf(x) * scale_factor) +  (slope) * x + yint
+    return (rv1.pdf(x) * scale_factor) 
+    """
     
     #triple peaked gaussian for testing
-    """
+"""
     central_mean = 0
     central_std = .2
     central_scale = 1
@@ -291,7 +285,7 @@ def test_func(x):
     line_val =  0#TODO undo cont_slope * x + cont_yint
     """
 
-    return  gauss_sum + line_val 
+    #return  gauss_sum + line_val 
 
 
 
@@ -305,8 +299,9 @@ Inputs:
     noise_level: additive noise is pulled from a standard normal distribution
         and multiplied by this factor for each datapoint
 """
-def gen_test_data(range_start, range_end, num_points, noise_level):
+def gen_gauss_test_data(range_start, range_end, mean, std, scale, num_points, noise_level):
     interval = (range_end - range_start) / num_points
+    test_func = stats.norm(mean, std)
     #generate the x (frequency) values
     freq_data = []
     for num in range(num_points):
@@ -316,11 +311,11 @@ def gen_test_data(range_start, range_end, num_points, noise_level):
     #counter = 0
     for freq in freq_data:
         #if counter % 2 == 0 :
-        intensity_data.append(test_func(freq))
+        intensity_data.append(test_func(freq) * scale)
         #else :
             #intensity_data.append(0)
         #counter += 1
-    df = pd.DataFrame({'scan__datetime':'2022-07-01 00:08:38.400005+00:00', 'frequency': freq_data, 'intensity': intensity_data})
+    df = pd.DataFrame({'scan__datetime':'test_data', 'frequency': freq_data, 'intensity': intensity_data})
     noise = stats.norm().rvs(size=num_points) * noise_level
 
 
