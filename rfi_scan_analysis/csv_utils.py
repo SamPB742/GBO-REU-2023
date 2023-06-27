@@ -146,11 +146,11 @@ def cont_gauss_fit(data):
     except RuntimeError as err:
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
-        return [0, 0, 0, 1, 0]
+        return [0, 1, 0]
     except TypeError as err:
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
-        return [0, 0, 0, 1, 0]
+        return [0, 1, 0]
     
     """ old code for displaying the fit immediately, instead we would like to store it in the object
     #display the parameters
@@ -311,7 +311,7 @@ def gen_gauss_test_data(range_start, range_end, mean, std, scale, num_points, no
     #counter = 0
     for freq in freq_data:
         #if counter % 2 == 0 :
-        intensity_data.append(test_func(freq) * scale)
+        intensity_data.append(test_func.pdf(freq) * scale)
         #else :
             #intensity_data.append(0)
         #counter += 1
@@ -507,7 +507,7 @@ def compare_scans(data):
     plt.show()
     return
 
-compare_scans(trim_data(l_import, 1425, 1430))
+#compare_scans(trim_data(l_import, 1425, 1430))
 
 
 
