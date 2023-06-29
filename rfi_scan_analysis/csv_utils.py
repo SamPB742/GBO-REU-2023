@@ -7,19 +7,22 @@ from scipy import stats
 from scipy import optimize
 from scipy import signal
 from scipy import fft
+import sys
 
 
 
 
 
-fpath1 = "/home/scratch/sbarton/data/test_hump.csv"
+
+fpath1 = "rfi_scans_csv/test_hump.csv"
 prime_import = pd.read_csv(fpath1)
-fpath2 = "/home/scratch/sbarton/data/s_band.csv"
+fpath2 = "rfi_scans_csv/s_band.csv"
 s_import = pd.read_csv(fpath2)
-fpath3 = "/home/scratch/sbarton/data/c_band.csv"
+fpath3 = "rfi_scans_csv/c_band.csv"
 c_import = pd.read_csv(fpath3)
-fpath4 = "/home/scratch/sbarton/data/l_band.csv"
+fpath4 = "rfi_scans_csv/l_band.csv"
 l_import = pd.read_csv(fpath4)
+
 
 """
 Class representing the fit to a Gaussian peak, stores the mean, std, and scale factor.
@@ -592,6 +595,47 @@ def make_plot(data):
 
 #print(data[data['intensity'] < 0])
 
-#integrate_range(data_import, 840, 875, '2022-07-01 00:08:38.400005+00:00')
+#print(integrate_range(trim_data(prime_import, 840, 875, '2022-07-01 00:08:38.400005+00:00')))
+#compare_scans(trim_data(l_import, 1425, 1430))
+#fit_peaks(trim_data(l_import, 1200, 1800, '2023-01-03 06:44:38.399996+00:00'))
 
 print("Hello World!")
+
+#code for running from command line
+#TODO check arg lengths and values
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args[0] == "integrate":
+        print(f"Integrating scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
+        try:
+            data = pd.read_csv(args[1])
+        except RuntimeError as err:
+            print("Failed to read csv file with error: " + err)
+        try:
+            result = integrate_range(trim_data(data, float(args[3]), float(args[4]), args[2]))
+            print(result)
+        except RuntimeError as err:
+            print("Failed to integrate range with error: " + err)
+        print(result)
+    elif args[0] == "identify":
+        print(f"Identifying peaks in scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
+        try:
+            data = pd.read_csv(args[1])
+        except RuntimeError as err:
+            print("Failed to read csv file with error: " + err)
+        try:
+            result = fit_peaks(trim_data(data, float(args[3]), float(args[4]), args[2]))
+        except RuntimeError as err:
+            print("Failed to fit peaks with error: " + err)
+    elif args[0] == "compare":
+        print(f"Comparing total intensity over the frequency range {args[2]} MHz to {args[3]} MHz for all scans in {args[1]}")
+        try:
+            data = pd.read_csv(args[1])
+        except RuntimeError as err:
+            print("Failed to read csv file with error: " + err)
+        try:
+            result = compare_scans(trim_data(data, float(args[2]), float(args[3])))
+        except RuntimeError as err:
+            print("Failed to compare scans with error: " + err)
+    else:
+        print(f"Invalid input {args[0]}, first argument must be integrate, identify, or compare")
