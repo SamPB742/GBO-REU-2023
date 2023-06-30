@@ -13,7 +13,7 @@ import sys
 
 
 
-
+"""
 fpath1 = "rfi_scans_csv/test_hump.csv"
 prime_import = pd.read_csv(fpath1)
 fpath2 = "rfi_scans_csv/s_band.csv"
@@ -22,7 +22,7 @@ fpath3 = "rfi_scans_csv/c_band.csv"
 c_import = pd.read_csv(fpath3)
 fpath4 = "rfi_scans_csv/l_band.csv"
 l_import = pd.read_csv(fpath4)
-
+"""
 
 """
 Class representing the fit to a Gaussian peak, stores the mean, std, and scale factor.
