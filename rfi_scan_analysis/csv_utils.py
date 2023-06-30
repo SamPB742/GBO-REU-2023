@@ -141,8 +141,8 @@ Output:
 def cont_gauss_fit(data):
     #starting guess for the mean in the middle of the frequency window
     mean_guess = data['frequency'].iloc[data['frequency'].size // 2]
-    std_guess = 1 #TODO make a better guess
     #starting guess for the std the size of the frequency window / 10
+    std_guess = np.std(data['intensity'])
     #optimize 
     try:
         params = optimize.curve_fit(simple_gauss_func, data['frequency'], data['intensity'], (mean_guess, std_guess, 1))[0]
@@ -200,8 +200,7 @@ Output:
 """
 def simple_gauss_func(x, gauss_mean, gauss_std, scale_factor):
     gaussian = stats.norm(gauss_mean, gauss_std)
-    line_val =  0#TODO undo this cont_slope * x + cont_yint
-    return (gaussian.pdf(x) * scale_factor) +  line_val 
+    return (gaussian.pdf(x) * scale_factor)
 
 """
 Function defining a triple gaussian profile plus linear continuum level,
@@ -245,7 +244,6 @@ def triple_gauss_func(x, cont_yint, cont_slope,
     gauss_sum = (central_gauss.pdf(x) * central_scale)
     gauss_sum += (left_middle_gauss.pdf(x)  + right_middle_gauss.pdf(x)) * middle_scale
     gauss_sum += (left_outer_gauss.pdf(x) + right_outer_gauss.pdf(x)) * outer_scale
-    line_val =  0#TODO undo cont_slope * x + cont_yint
 
     return  gauss_sum + line_val 
 
@@ -285,7 +283,7 @@ def test_func(x, mean, std, scale_factor):
     gauss_sum = (central_gauss.pdf(x) * central_scale)
     gauss_sum += (left_middle_gauss.pdf(x) * middle_scale) + (right_middle_gauss.pdf(x) * middle_scale)
     gauss_sum += (left_outer_gauss.pdf(x) * outer_scale) + (right_outer_gauss.pdf(x) * outer_scale)
-    line_val =  0#TODO undo cont_slope * x + cont_yint
+    line_val =  cont_slope * x + cont_yint
     """
 
     #return  gauss_sum + line_val 
@@ -363,6 +361,13 @@ cont_gauss_fit(s_import, 2700, 3000, '2023-03-12 22:37:55.199997+00:00')
 
 #cont_gauss_fit(l_import, 1255.9, 1256.1, '2023-01-03 06:44:38.399996+00:00', False)
 
+"""
+#TODO documentation
+"""
+def window_rms(a, window_size):
+  a2 = np.power(a,2)
+  window = np.ones(window_size)/float(window_size)
+  return np.sqrt(np.convolve(a2, window, 'valid'))
 
 """
 Finds all the peaks in a data set and fit gaussian curves to them
@@ -376,7 +381,10 @@ Output:
 """
 def fit_peaks(data):
     scan_name = data['scan__datetime'].iloc[0]
-    peaks = signal.find_peaks(data['intensity'], height=10)[0] #TODO make this value have to do with the noise level
+    #scan is already cont subtracted so mean is 0, values are already difference from mean
+    noise_level = np.mean(window_rms(data['intensity'], 5))
+    print(noise_level)
+    peaks = signal.find_peaks(data['intensity'], height=noise_level)[0] 
     plt.plot('frequency', 'intensity', 'r', data=data, lw=1) #real data
     print(peaks)
     crit_freqs = []
