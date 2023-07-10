@@ -14,7 +14,7 @@ import sys
 
 
 
-
+"""
 fpath1 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/test_hump.csv"
 prime_import = pd.read_csv(fpath1)
 fpath2 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/s_band.csv"
@@ -23,7 +23,7 @@ fpath3 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/c_band.csv"
 c_import = pd.read_csv(fpath3)
 fpath4 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/l_band.csv"
 l_import = pd.read_csv(fpath4)
-
+"""
 #TODO comment out
 
 """
@@ -534,7 +534,7 @@ def find_limits(data, peak_freq_idx):
 
 
 #TODO comment out
-fit_peaks(trim_data(l_import, 1400, 1500, '2023-01-03 06:44:38.399996+00:00'))
+#fit_peaks(trim_data(l_import, 1400, 1500, '2023-01-03 06:44:38.399996+00:00'))
 #fit_peaks(trim_data(s_import, 1800, 2600, '2023-03-12 22:37:55.199997+00:00'))
 
 """
@@ -587,7 +587,7 @@ def compare_scans(data, stat):
             scan_datapoints.append(total)
             scan_dates.append(scan_date)
         elif stat == 'mean' or stat == 'std' or stat == 'num_peaks': 
-            features = fit_peaks(data)
+            features = fit_peaks(data) #TODO this is the current problem, need to trim
             if stat == 'mean':
                 for feature in features:
                     scan_datapoints.append(feature.main_peak.mean)
@@ -735,16 +735,16 @@ if __name__ == "__main__":
             except RuntimeError as err:
                 print("Failed to fit peaks with error: " + err)
     elif args[0] == "compare":
-        if len(args) != 4:
-            print("Expected 5 arguments: identify <filepath> <mean/std/intensity> <lower bound (MHz)> <upper bound (MHz)>")
+        if len(args) != 5:
+            print("Expected 5 arguments: compare <filepath> <mean/std/intensity> <lower bound (MHz)> <upper bound (MHz)>")
         else: 
-            print(f"Comparing total intensity over the frequency range {args[2]} MHz to {args[3]} MHz for all scans in {args[1]}")
+            print(f"Comparing {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz for all scans in {args[2]}")
             try:
-                data = pd.read_csv(args[1])
+                data = pd.read_csv(args[2])
             except RuntimeError as err:
                 print("Failed to read csv file with error: " + err)
             try:
-                result = compare_scans(trim_data(data, float(args[2]), float(args[3])))
+                result = compare_scans(trim_data(data, float(args[3]), float(args[4])), args[1])
             except RuntimeError as err:
                 print("Failed to compare scans with error: " + err)
     else:
