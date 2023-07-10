@@ -13,22 +13,24 @@ import sys
 
 
 
-"""
-fpath1 = "rfi_scans_csv/test_hump.csv"
+
+fpath1 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/test_hump.csv"
 prime_import = pd.read_csv(fpath1)
-fpath2 = "rfi_scans_csv/s_band.csv"
+fpath2 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/s_band.csv"
 s_import = pd.read_csv(fpath2)
-fpath3 = "rfi_scans_csv/c_band.csv"
+fpath3 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/c_band.csv"
 c_import = pd.read_csv(fpath3)
-fpath4 = "rfi_scans_csv/l_band.csv"
+fpath4 = "/home/scratch/sbarton/GBO-REU-2023/rfi_scans_csv/l_band.csv"
 l_import = pd.read_csv(fpath4)
-"""
+
+#TODO comment out
 
 """
 Class representing the fit to a Gaussian peak, stores the mean, std, and scale factor.
 Init takes data and automatically fits and stores a gaussian in the new object.
 GaussPeak.func allows querying the model gaussian at a particular input (frequency)
 """
+#TODO save the data and add a plotting function
 class GaussPeak:
     """
     Fits a gaussian to the provided data and store it's parameters in this object
@@ -73,13 +75,13 @@ class RFIFeature:
         main_peak: a GaussPeak that is the central and/or largest peak in this feature
         sub_peaks: a list of other GaussPeaks in the same feature
     """
-    def __init__(self, main_peak, sub_peaks):
+    def __init__(self, main_peak, all_peaks):
         if(not isinstance(main_peak, GaussPeak)):
             raise TypeError("Main peak must be a GaussPeak")
         self.main_peak = main_peak
-        if(not isinstance(sub_peaks, list) or not all(isinstance(item, GaussPeak) for item in sub_peaks)):
+        if(not isinstance(all_peaks, list) or not all(isinstance(item, GaussPeak) for item in all_peaks)):
             raise TypeError("Sub peaks must be a list of GaussPeak")
-        self.sub_peaks = sub_peaks
+        self.all_peaks = all_peaks
         
 """
 Trim frequency-intensity data to only contain datapoints in a particular frequency range,
@@ -96,7 +98,7 @@ Output:
     from the particular scan (if specified), sorted by frequency
 """        
 def trim_data(data, range_start, range_end, scan_name = None):
-    data = data[(data['frequency'] > range_start) & (data['frequency'] < range_end)]
+    data = data[(data['frequency'] >= range_start) & (data['frequency'] <= range_end)]
     if(scan_name != None):
         data = data[data['scan__datetime'] == scan_name]
     data = data.sort_values(by=['frequency'])
@@ -141,11 +143,15 @@ Output:
 def cont_gauss_fit(data):
     #starting guess for the mean in the middle of the frequency window
     mean_guess = data['frequency'].iloc[data['frequency'].size // 2]
-    #starting guess for the std the size of the frequency window / 10
-    std_guess = np.std(data['intensity'])
+    #since gaussian has area of 1, expect to scale by this much later
+    scale_guess = integrate_range(data)
+    #expect 6 sd lengths in the feature
+    std_guess = (data['frequency'].size / 6) * scale_guess
+
+    #print(f'mean guess: {mean_guess}, std guess: {std_guess}, scale guess: {scale_guess}')
     #optimize 
     try:
-        params = optimize.curve_fit(simple_gauss_func, data['frequency'], data['intensity'], (mean_guess, std_guess, 1))[0]
+        params = optimize.curve_fit(simple_gauss_func, data['frequency'], data['intensity'], (mean_guess, std_guess, scale_guess))[0]
     except RuntimeError as err:
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
@@ -154,6 +160,8 @@ def cont_gauss_fit(data):
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
         return [0, 1, 0]
+    
+    #print(params)
     
     """ old code for displaying the fit immediately, instead we would like to store it in the object
     #display the parameters
@@ -245,7 +253,7 @@ def triple_gauss_func(x, cont_yint, cont_slope,
     gauss_sum += (left_middle_gauss.pdf(x)  + right_middle_gauss.pdf(x)) * middle_scale
     gauss_sum += (left_outer_gauss.pdf(x) + right_outer_gauss.pdf(x)) * outer_scale
 
-    return  gauss_sum + line_val 
+    return  gauss_sum
 
 
 
@@ -367,7 +375,7 @@ cont_gauss_fit(s_import, 2700, 3000, '2023-03-12 22:37:55.199997+00:00')
 def window_rms(a, window_size):
   a2 = np.power(a,2)
   window = np.ones(window_size)/float(window_size)
-  return np.sqrt(np.convolve(a2, window, 'valid'))
+  return np.sqrt(np.convolve(a2, window, 'same'))
 
 """
 Finds all the peaks in a data set and fit gaussian curves to them
@@ -377,19 +385,21 @@ Inputs:
     frequency range to be fit, sorted by frequency
 
 Output:
-    a list of GaussPeak objects representing the fits to the found peaks
+    a list of RFIFeature objects representing the found features
 """
 def fit_peaks(data):
     scan_name = data['scan__datetime'].iloc[0]
     #scan is already cont subtracted so mean is 0, values are already difference from mean
-    noise_level = np.mean(window_rms(data['intensity'], 5))
+    data['smoothed'] = window_rms(data['intensity'], 5)
+    noise_level = 5 * np.median(data['smoothed'])
     print(noise_level)
     peaks = signal.find_peaks(data['intensity'], height=noise_level)[0] 
     plt.plot('frequency', 'intensity', 'r', data=data, lw=1) #real data
-    print(peaks)
+    print(data.iloc[peaks])
     crit_freqs = []
     crit_ints = []
     gauss_peaks = []
+    #last_peak = None 
     for peak in peaks:
         #don't need to keep track of these once GaussPeak implemented
         #crit_freqs.append(range_data['frequency'].iloc[peak])
@@ -397,7 +407,9 @@ def fit_peaks(data):
 
         #delegate fitting of feature to GaussPeak init
         this_peak = GaussPeak(data, peak, scan_name)
+
         gauss_peaks.append(this_peak)
+        #last_peak = this_peak
         
         #crit_freqs.append(this_peak.left_min_freq)
         #crit_freqs.append(this_peak.right_min_freq)
@@ -406,26 +418,60 @@ def fit_peaks(data):
 
 
     #plt.plot(crit_freqs, crit_ints, 'b.')
-    color = 'b'
-    last_mean = 0
+    gauss_features = []
+    peak_set = []
+
+    last_mean = -1000 #nonsense value
     last_std = 0
+    main_peak = None
     for peak in gauss_peaks:
-        #flip color if new feature
+        #update main_peak if necessary
+        #main peak is the tallest peak
+        if(main_peak == None or main_peak.func(main_peak.mean) < peak.func(peak.mean)):
+            main_peak = peak
+        #start new feature if not close enough together
         if(last_mean + (5 * last_std) < peak.mean - (5 * peak.std)):
-            if(color == 'b'):
-                color = 'g'
-            else:
-                color = 'b'
+            gauss_features.append(RFIFeature(main_peak, peak_set))
+            peak_set = [peak]
+        else:
+            peak_set.append(peak)
+        """ code to plot individual peaks, no longer used
         #generate freq chunks
         freqs = np.linspace(peak.left_min_freq, peak.right_min_freq, 100)
         #run through func
         plt.plot(freqs, peak.func(freqs), color)
         #plot
+        """
         last_mean = peak.mean
         last_std = peak.std
+
+    #append last feature
+    gauss_features.append(RFIFeature(main_peak, peak_set))
+
+    #plot each feature
+    color = 'b'
+    for feature in gauss_features:
+        #print(color)
+        #print(feature)
+        #print(feature.all_peaks)
+        
+        #switch color
+        if color == 'b':
+            color = 'g'
+        else:
+            color = 'b'
+
+        for peak in feature.all_peaks:
+            #generate freq chunks
+            freqs = np.linspace(peak.left_min_freq, peak.right_min_freq, 100)
+            #run through func
+            plt.plot(freqs, peak.func(freqs), color)
+            #plot
+
+
     plt.show()
 
-    return gauss_peaks
+    return gauss_features
 
 """
 Finds the minima on either side of a peak
@@ -460,16 +506,18 @@ def find_limits(data, peak_freq_idx):
         last_idx = idx
     #print("left min idx for " + str(peak_freq_idx) + ": " + str(left_min_idx))
 
+    #print(f"found limits {right_min_idx}, {left_min_idx}")
+
     return right_min_idx, left_min_idx
 
 
 
 
+#TODO comment out
+fit_peaks(trim_data(l_import, 1200, 1800, '2023-01-03 06:44:38.399996+00:00'))
+#fit_peaks(trim_data(s_import, 1800, 2600, '2023-03-12 22:37:55.199997+00:00'))
 
-#fit_peaks(trim_data(l_import, 1200, 1800, '2023-01-03 06:44:38.399996+00:00'))
-#fit_peaks(s_import, 1800, 2600, '2023-03-12 22:37:55.199997+00:00')
-
-"""#TODO finish trim_data refactor
+"""
 Perform an FFT on an RFI scan and plot the results
 
 Inputs:
