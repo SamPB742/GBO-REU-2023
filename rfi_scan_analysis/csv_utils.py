@@ -169,11 +169,11 @@ def cont_gauss_fit(data):
     except RuntimeError as err:
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
-        return [0, 1, 0]
+        return [mean_guess, std_guess, 0]
     except TypeError as err:
         print(f'Failed to fit peak at {mean_guess}.')
         print(f'\t internal error {err}')
-        return [0, 1, 0]
+        return [mean_guess, std_guess, 0]
     
     #print(params)
     
