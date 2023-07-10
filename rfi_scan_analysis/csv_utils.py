@@ -30,7 +30,6 @@ Class representing the fit to a Gaussian peak, stores the mean, std, and scale f
 Init takes data and automatically fits and stores a gaussian in the new object.
 GaussPeak.func allows querying the model gaussian at a particular input (frequency)
 """
-#TODO save the data and add a plotting function
 class GaussPeak:
     """
     Fits a gaussian to the provided data and store it's parameters in this object
@@ -48,7 +47,9 @@ class GaussPeak:
         self.right_min_freq = data.loc[right_min_idx]['frequency']
         self.right_min_int = data.loc[right_min_idx]['intensity']
 
-        params = cont_gauss_fit(trim_data(data, self.left_min_freq, self.right_min_freq, scan_name))
+        self.peak_data = trim_data(data, self.left_min_freq, self.right_min_freq, scan_name)
+
+        params = cont_gauss_fit(self.peak_data)
 
         #self.yint = params[0]
         #self.slope = params[1]
@@ -67,6 +68,15 @@ class GaussPeak:
     def func(self, freq):
         return self.gauss.pdf(freq) * self.scale
     
+    def plot(self, color):
+        #generate freq chunks
+        freqs = np.linspace(self.left_min_freq, self.right_min_freq, 100)
+        #run through func
+        plt.plot(freqs, self.func(freqs), color)
+        #plot
+    
+
+
 class RFIFeature:
     """
     Creates a new RFI feature from a group of gaussian peaks
@@ -82,6 +92,10 @@ class RFIFeature:
         if(not isinstance(all_peaks, list) or not all(isinstance(item, GaussPeak) for item in all_peaks)):
             raise TypeError("Sub peaks must be a list of GaussPeak")
         self.all_peaks = all_peaks
+
+    def plot(self, color):
+        for peak in self.all_peaks:
+            peak.plot(color)
         
 """
 Trim frequency-intensity data to only contain datapoints in a particular frequency range,
@@ -461,14 +475,9 @@ def fit_peaks(data):
         else:
             color = 'b'
 
-        for peak in feature.all_peaks:
-            #generate freq chunks
-            freqs = np.linspace(peak.left_min_freq, peak.right_min_freq, 100)
-            #run through func
-            plt.plot(freqs, peak.func(freqs), color)
-            #plot
+        feature.plot(color)
 
-
+#TODO
     plt.show()
 
     return gauss_features
@@ -514,7 +523,7 @@ def find_limits(data, peak_freq_idx):
 
 
 #TODO comment out
-fit_peaks(trim_data(l_import, 1200, 1800, '2023-01-03 06:44:38.399996+00:00'))
+fit_peaks(trim_data(l_import, 1400, 1500, '2023-01-03 06:44:38.399996+00:00'))
 #fit_peaks(trim_data(s_import, 1800, 2600, '2023-03-12 22:37:55.199997+00:00'))
 
 """
