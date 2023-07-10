@@ -1,3 +1,4 @@
+
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -383,8 +384,18 @@ cont_gauss_fit(s_import, 2700, 3000, '2023-03-12 22:37:55.199997+00:00')
 
 #cont_gauss_fit(l_import, 1255.9, 1256.1, '2023-01-03 06:44:38.399996+00:00', False)
 
+
 """
-#TODO documentation
+Takes the rolling average of a dataset
+
+Inputs:
+    a: a numerical data set
+    window_size: the size of window to use for taking a rolling average, 
+      should be smaller than len(a)
+
+Outputs:
+    a list of the rolling averages, of the same size as the input list
+    there will be some edge effects visible
 """
 def window_rms(a, window_size):
   a2 = np.power(a,2)
@@ -477,7 +488,7 @@ def fit_peaks(data):
 
         feature.plot(color)
 
-#TODO
+#TODO clean print output for this function
     plt.show()
 
     return gauss_features
@@ -527,18 +538,18 @@ fit_peaks(trim_data(l_import, 1400, 1500, '2023-01-03 06:44:38.399996+00:00'))
 #fit_peaks(trim_data(s_import, 1800, 2600, '2023-03-12 22:37:55.199997+00:00'))
 
 """
-Perform an FFT on an RFI scan and plot the results
+Perform an FFT on an RFI scan and plot the results. 
 
 Inputs:
     data: a pandas dataframe containing only data from a particular scan, in the 
     frequency range to be transformed, sorted by frequency
     
-"""
+
 def fourier_transform(data):
     # Number of sample points
     N = data['intensity'].size
     # sample spacing
-    T = N/1 #(range_end - range_start) #TODO calculate these
+    T = N/1 #(range_end - range_start) #todo calculate these
     x = np.linspace(0.0, N*T, N, endpoint=False)
     #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
     yf = fft.fft(data['intensity'].to_numpy())
@@ -547,6 +558,7 @@ def fourier_transform(data):
     plt.plot(xf, 2.0/N * np.abs(yf[0:N//2]))
     plt.grid()
     plt.show()
+"""
 
 
 
@@ -554,24 +566,47 @@ def fourier_transform(data):
 #fit_peaks(l_import, 1306.45, 1306.6, '2023-01-03 06:44:38.399996+00:00')
 
 
-"""
+""" #TODO allow comparing mean and std as well
 Compared integrated intensity of a frequency region over multiple scans
 
 Inputs:
     data: a pandas dataframe containing data from an arbitrary number of scans, in the 
     frequency range to be integrated, sorted by frequency
+    stat: either 'mean', 'std', 'num_peaks' or 'intensity' to determine what stat is 
+    being compared
 """
-def compare_scans(data):
+def compare_scans(data, stat):
     uniques = data['scan__datetime'].unique()
     uniques = np.sort(uniques)
     scan_dates = []
-    scan_intensities = []
+    scan_datapoints = []
     for scan_name in uniques:
-        total = integrate_range(data[data['scan__datetime'] == scan_name])
-        scan_dates.append(datetime.strptime(scan_name[0:19], '%Y-%m-%d %H:%M:%S'))
-        scan_intensities.append(total)
+        scan_date = datetime.strptime(scan_name[0:19], '%Y-%m-%d %H:%M:%S')
+        if stat == 'intensity':
+            total = integrate_range(data[data['scan__datetime'] == scan_name])
+            scan_datapoints.append(total)
+            scan_dates.append(scan_date)
+        elif stat == 'mean' or stat == 'std' or stat == 'num_peaks': 
+            features = fit_peaks(data)
+            if stat == 'mean':
+                for feature in features:
+                    scan_datapoints.append(feature.main_peak.mean)
+                    scan_dates.append(scan_date)
+            elif stat == 'std':
+                for feature in features:
+                    scan_datapoints.append(feature.main_peak.std)
+                    scan_dates.append(scan_date)
+            elif stat == 'num_peaks':
+                total_peaks = 0
+                for feature in features:
+                    total_peaks += len(feature.all_peaks)
+                scan_datapoints.append(total_peaks)
+                scan_dates.append(scan_date)
+        else:
+            print(f"Statistic to be compared must be 'mean', 'std', 'num_peaks' or 'intensity', received {stat}")
+            return
 
-    plt.plot(scan_dates, scan_intensities, 'r.')
+    plt.plot(scan_dates, scan_datapoints, 'r.')
     plt.show()
     return
 
@@ -667,40 +702,50 @@ def make_plot(data):
 print("Hello World!")
 
 #code for running from command line
-#TODO check arg lengths and values
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if args[0] == "integrate":
-        print(f"Integrating scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
-        try:
-            data = pd.read_csv(args[1])
-        except RuntimeError as err:
-            print("Failed to read csv file with error: " + err)
-        try:
-            result = integrate_range(trim_data(data, float(args[3]), float(args[4]), args[2]))
+    if len(args) < 1:
+        print("Expected command line args startng with integrate, identify, or compare")
+    elif args[0] == "integrate":
+        if len(args) != 5:
+            print("Expected 5 arguments: integrate <filepath> <scan_name> <lower bound (MHz)> <upper bound (MHz)>")
+        else:
+            print(f"Integrating scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
+            try:
+                data = pd.read_csv(args[1])
+            except RuntimeError as err:
+                print("Failed to read csv file with error: " + err)
+            try:
+                result = integrate_range(trim_data(data, float(args[3]), float(args[4]), args[2]))
+                print(result)
+            except RuntimeError as err:
+                print("Failed to integrate range with error: " + err)
             print(result)
-        except RuntimeError as err:
-            print("Failed to integrate range with error: " + err)
-        print(result)
     elif args[0] == "identify":
-        print(f"Identifying peaks in scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
-        try:
-            data = pd.read_csv(args[1])
-        except RuntimeError as err:
-            print("Failed to read csv file with error: " + err)
-        try:
-            result = fit_peaks(trim_data(data, float(args[3]), float(args[4]), args[2]))
-        except RuntimeError as err:
-            print("Failed to fit peaks with error: " + err)
+        if len(args) != 5:
+            print("Expected 5 arguments: identify <filepath> <scan_name> <lower bound (MHz)> <upper bound (MHz)>")
+        else:
+            print(f"Identifying peaks in scan {args[2]} from file {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz")
+            try:
+                data = pd.read_csv(args[1])
+            except RuntimeError as err:
+                print("Failed to read csv file with error: " + err)
+            try:
+                result = fit_peaks(trim_data(data, float(args[3]), float(args[4]), args[2]))
+            except RuntimeError as err:
+                print("Failed to fit peaks with error: " + err)
     elif args[0] == "compare":
-        print(f"Comparing total intensity over the frequency range {args[2]} MHz to {args[3]} MHz for all scans in {args[1]}")
-        try:
-            data = pd.read_csv(args[1])
-        except RuntimeError as err:
-            print("Failed to read csv file with error: " + err)
-        try:
-            result = compare_scans(trim_data(data, float(args[2]), float(args[3])))
-        except RuntimeError as err:
-            print("Failed to compare scans with error: " + err)
+        if len(args) != 4:
+            print("Expected 5 arguments: identify <filepath> <mean/std/intensity> <lower bound (MHz)> <upper bound (MHz)>")
+        else: 
+            print(f"Comparing total intensity over the frequency range {args[2]} MHz to {args[3]} MHz for all scans in {args[1]}")
+            try:
+                data = pd.read_csv(args[1])
+            except RuntimeError as err:
+                print("Failed to read csv file with error: " + err)
+            try:
+                result = compare_scans(trim_data(data, float(args[2]), float(args[3])))
+            except RuntimeError as err:
+                print("Failed to compare scans with error: " + err)
     else:
         print(f"Invalid input {args[0]}, first argument must be integrate, identify, or compare")
