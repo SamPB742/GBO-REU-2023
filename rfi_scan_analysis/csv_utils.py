@@ -40,13 +40,15 @@ class GaussPeak:
         peak_freq: the frequency at which the peak we are fitting in the data occurs
         scan_name: the name of the scan in the dataset
     """
-    def __init__(self, data, peak_freq, scan_name):
-        right_min_idx, left_min_idx = find_limits(data, peak_freq)
+    def __init__(self, data, peak_idx, scan_name):
+        right_min_idx, left_min_idx = find_limits(data, peak_idx)
 
         self.left_min_freq = data.loc[left_min_idx]['frequency']
         self.left_min_int = data.loc[left_min_idx]['intensity']
         self.right_min_freq = data.loc[right_min_idx]['frequency']
         self.right_min_int = data.loc[right_min_idx]['intensity']
+
+        self.failed = False
 
         self.peak_data = trim_data(data, self.left_min_freq, self.right_min_freq, scan_name)
 
@@ -57,6 +59,16 @@ class GaussPeak:
         self.mean = params[0]
         self.std = params[1] 
         self.scale = params[2]
+
+        #if fit mean is outside, mark this fit as failed
+        if(self.mean < self.left_min_freq or self.mean > self.right_min_freq):
+            self.failed = True
+            self.mean = data.iloc[peak_idx]['frequency']
+            #intentionally large std estimate avoids features being broken up by failed fits
+            self.std = (self.right_min_freq - self.left_min_freq) / 3
+            self.scale = 0 #failed peak will graph flat
+
+
         #this gaussian can be used to get values from this GaussPeak
         self.gauss = stats.norm(self.mean, self.std)
 
@@ -88,7 +100,7 @@ class RFIFeature:
     """
     def __init__(self, main_peak, all_peaks):
         if(not isinstance(main_peak, GaussPeak)):
-            raise TypeError("Main peak must be a GaussPeak")
+                raise TypeError("Main peak must be a GaussPeak")
         self.main_peak = main_peak
         if(not isinstance(all_peaks, list) or not all(isinstance(item, GaussPeak) for item in all_peaks)):
             raise TypeError("Sub peaks must be a list of GaussPeak")
@@ -97,6 +109,13 @@ class RFIFeature:
     def plot(self, color):
         for peak in self.all_peaks:
             peak.plot(color)
+
+    def __str__(self):
+        string = "RFI Feature with main peak: " + str(self.main_peak) 
+        string += "\n all peaks in this feature: \n"
+        for peak in self.all_peaks:
+            string += "\t" + str(peak) + "\n"
+        return string
         
 """
 Trim frequency-intensity data to only contain datapoints in a particular frequency range,
@@ -161,7 +180,7 @@ def cont_gauss_fit(data):
     #since gaussian has area of 1, expect to scale by this much later
     scale_guess = integrate_range(data)
     #expect 6 sd lengths in the feature
-    std_guess = (data['frequency'].size / 6) * scale_guess
+    std_guess = (data['frequency'].size / 6) 
 
     #print(f'mean guess: {mean_guess}, std guess: {std_guess}, scale guess: {scale_guess}')
     #optimize 
@@ -418,14 +437,14 @@ def fit_peaks(data):
     data['smoothed'] = window_rms(data['intensity'], 5)
     noise_level = 5 * np.median(data['smoothed'])
     print(noise_level)
-    peaks = signal.find_peaks(data['intensity'], height=noise_level)[0] 
-    plt.plot('frequency', 'intensity', 'r', data=data, lw=1) #real data
-    print(data.iloc[peaks])
+    peak_idxs = signal.find_peaks(data['intensity'], height=noise_level)[0] 
+    #plt.plot('frequency', 'intensity', 'r', data=data, lw=1) #real data
+    print(data.iloc[peak_idxs])
     crit_freqs = []
     crit_ints = []
     gauss_peaks = []
     #last_peak = None 
-    for peak in peaks:
+    for peak in peak_idxs:
         #don't need to keep track of these once GaussPeak implemented
         #crit_freqs.append(range_data['frequency'].iloc[peak])
         #crit_ints.append(range_data['intensity'].iloc[peak])
@@ -444,12 +463,12 @@ def fit_peaks(data):
 
     #plt.plot(crit_freqs, crit_ints, 'b.')
     gauss_features = []
-    peak_set = []
+    peak_set = [gauss_peaks[0]]
 
-    last_mean = -1000 #nonsense value
-    last_std = 0
+    last_mean = gauss_peaks[0].mean
+    last_std = gauss_peaks[0].std
     main_peak = None
-    for peak in gauss_peaks:
+    for peak in gauss_peaks[1:]:
         #update main_peak if necessary
         #main peak is the tallest peak
         if(main_peak == None or main_peak.func(main_peak.mean) < peak.func(peak.mean)):
@@ -458,6 +477,7 @@ def fit_peaks(data):
         if(last_mean + (5 * last_std) < peak.mean - (5 * peak.std)):
             gauss_features.append(RFIFeature(main_peak, peak_set))
             peak_set = [peak]
+            main_peak = None
         else:
             peak_set.append(peak)
         """ code to plot individual peaks, no longer used
@@ -470,26 +490,17 @@ def fit_peaks(data):
         last_mean = peak.mean
         last_std = peak.std
 
+    if main_peak == None:
+        main_peak = gauss_peaks[-1]
     #append last feature
     gauss_features.append(RFIFeature(main_peak, peak_set))
 
     #plot each feature
-    color = 'b'
+    
+
     for feature in gauss_features:
-        #print(color)
-        #print(feature)
-        #print(feature.all_peaks)
-        
-        #switch color
-        if color == 'b':
-            color = 'g'
-        else:
-            color = 'b'
-
-        feature.plot(color)
-
-#TODO clean print output for this function
-    plt.show()
+        print(feature)
+    
 
     return gauss_features
 
@@ -575,7 +586,7 @@ Inputs:
     stat: either 'mean', 'std', 'num_peaks' or 'intensity' to determine what stat is 
     being compared
 """
-def compare_scans(data, stat):
+def compare_scans(data, stat, start, end):
     uniques = data['scan__datetime'].unique()
     uniques = np.sort(uniques)
     scan_dates = []
@@ -587,15 +598,17 @@ def compare_scans(data, stat):
             scan_datapoints.append(total)
             scan_dates.append(scan_date)
         elif stat == 'mean' or stat == 'std' or stat == 'num_peaks': 
-            features = fit_peaks(data) #TODO this is the current problem, need to trim
+            features = fit_peaks(trim_data(data, start, end, scan_name)) 
             if stat == 'mean':
                 for feature in features:
-                    scan_datapoints.append(feature.main_peak.mean)
-                    scan_dates.append(scan_date)
+                    if not feature.main_peak.failed:
+                        scan_datapoints.append(feature.main_peak.mean)
+                        scan_dates.append(scan_date)
             elif stat == 'std':
                 for feature in features:
-                    scan_datapoints.append(feature.main_peak.std)
-                    scan_dates.append(scan_date)
+                    if not feature.main_peak.failed:
+                        scan_datapoints.append(feature.main_peak.std)
+                        scan_dates.append(scan_date)
             elif stat == 'num_peaks':
                 total_peaks = 0
                 for feature in features:
@@ -731,20 +744,37 @@ if __name__ == "__main__":
             except RuntimeError as err:
                 print("Failed to read csv file with error: " + err)
             try:
-                result = fit_peaks(trim_data(data, float(args[3]), float(args[4]), args[2]))
+                trimmed_data = trim_data(data, float(args[3]), float(args[4]), args[2])
+                result = fit_peaks(trimmed_data)
+                #plot results
+                plt.plot('frequency', 'intensity', 'r', data=trimmed_data, lw=1) #real data
+                color = 'b'
+                for feature in result:
+                    #print(color)
+                    #print(feature)
+                    #print(feature.all_peaks)
+                    
+                    #switch color
+                    if color == 'b':
+                        color = 'g'
+                    else:
+                        color = 'b'
+
+                    feature.plot(color)
+                plt.show()
             except RuntimeError as err:
                 print("Failed to fit peaks with error: " + err)
     elif args[0] == "compare":
         if len(args) != 5:
-            print("Expected 5 arguments: compare <filepath> <mean/std/intensity> <lower bound (MHz)> <upper bound (MHz)>")
+            print("Expected 5 arguments: compare <mean/std/intensity> <filepath> <lower bound (MHz)> <upper bound (MHz)>")
         else: 
             print(f"Comparing {args[1]} over the frequency range {args[3]} MHz to {args[4]} MHz for all scans in {args[2]}")
             try:
                 data = pd.read_csv(args[2])
             except RuntimeError as err:
                 print("Failed to read csv file with error: " + err)
-            try:
-                result = compare_scans(trim_data(data, float(args[3]), float(args[4])), args[1])
+            try: #pass bounds twice so can be trimmed again if necessary in compare_scans
+                result = compare_scans(trim_data(data, float(args[3]), float(args[4])), args[1], float(args[3]), float(args[4]))
             except RuntimeError as err:
                 print("Failed to compare scans with error: " + err)
     else:
